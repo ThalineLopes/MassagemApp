@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAgendamentos } from "../../lib/database/agendamentoService";
+import { cancelarAgendamento, getAgendamentos } from "../../lib/database/agendamentoService";
 
 const CURRENT_USER_KEY = "@currentUser";
 
@@ -56,6 +56,15 @@ export default function MeusAgendamentos() {
     Linking.openURL("https://wa.me/5511999999999").catch(() => {});
   };
 
+  const desmarcar = async (id: number) => {
+    try {
+      await cancelarAgendamento(id);
+      await carregar();
+    } catch (e) {
+      console.warn("Erro ao desmarcar:", e);
+    }
+  };
+
   const image = { uri: "https://i.ibb.co/1GDXKdtv/fundo-png.webp" };
 
   return (
@@ -78,8 +87,15 @@ export default function MeusAgendamentos() {
           ) : (
             lista.map((item) => (
               <View key={item.id} style={styles.item}>
-                <Text style={styles.itemData}>{formatarData(item.data)} às {item.hora}</Text>
-                <Text style={styles.itemServico}>{item.servico}</Text>
+                <View style={styles.itemConteudo}>
+                  <View>
+                    <Text style={styles.itemData}>{formatarData(item.data)} às {item.hora}</Text>
+                    <Text style={styles.itemServico}>{item.servico}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.botaoDesmarcar} onPress={() => desmarcar(item.id)}>
+                    <Text style={styles.botaoDesmarcarTexto}>Desmarcar</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
@@ -123,8 +139,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 10,
   },
+  itemConteudo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   itemData: { fontWeight: "bold", color: "#2F5D50", fontSize: 15 },
   itemServico: { color: "#444", marginTop: 4 },
+  botaoDesmarcar: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: "rgba(199, 76, 76, 0.9)",
+  },
+  botaoDesmarcarTexto: { color: "#fff", fontWeight: "600", fontSize: 14 },
   rodape: {
     position: "absolute",
     bottom: 0,
