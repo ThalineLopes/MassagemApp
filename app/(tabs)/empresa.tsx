@@ -1,81 +1,49 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { cancelarAgendamento, getAgendamentos } from "../../lib/database/agendamentoService";
 
-type Agendamento = {
+type AgendamentoItem = {
+  id: number;
+  data: string;
   hora: string;
   servico: string;
+  cliente_nome: string | null;
 };
 
 export default function Empresa() {
-  const [agendamentos, setAgendamentos] = useState<{
-    [data: string]: Agendamento[];
-  }>({});
+  const [lista, setLista] = useState<AgendamentoItem[]>([]);
 
-  const carregarAgendamentos = async () => {
+  const carregar = useCallback(async () => {
     try {
-      const dados = await AsyncStorage.getItem("@agendamentos");
-
-      if (dados !== null) {
-        const dadosParse = JSON.parse(dados);
-
-        // 🔥 Converte formato antigo automaticamente
-        const dadosConvertidos: { [data: string]: Agendamento[] } = {};
-
-        Object.entries(dadosParse).forEach(([data, lista]: any) => {
-          dadosConvertidos[data] = lista.map((item: any) => {
-            if (typeof item === "string") {
-              // formato antigo
-              return {
-                hora: item,
-                servico: "Serviço não informado",
-              };
-            }
-            return item;
-          });
-        });
-
-        setAgendamentos(dadosConvertidos);
-        await AsyncStorage.setItem(
-          "@agendamentos",
-          JSON.stringify(dadosConvertidos),
-        );
-      } else {
-        const agendamentosIniciais = {
-          "2026-03-05": [{ hora: "14:00", servico: "Massagem Relaxante" }],
-          "2026-03-06": [{ hora: "09:30", servico: "Drenagem Linfática" }],
-        };
-
-        await AsyncStorage.setItem(
-          "@agendamentos",
-          JSON.stringify(agendamentosIniciais),
-        );
-
-        setAgendamentos(agendamentosIniciais);
-      }
-    } catch (error) {
-      console.log("Erro ao carregar:", error);
+      const dados = await getAgendamentos();
+      setLista(dados);
+    } catch (e) {
+      console.warn("Erro ao carregar:", e);
     }
-  };
-
-  useEffect(() => {
-    carregarAgendamentos();
   }, []);
 
-  function cancelarHorario(data: string, hora: string) {
-    const novosAgendamentos = { ...agendamentos };
+  useFocusEffect(
+    useCallback(() => {
+      carregar();
+    }, [carregar])
+  );
 
-    novosAgendamentos[data] = novosAgendamentos[data].filter(
-      (item) => item.hora !== hora,
-    );
-
-    if (novosAgendamentos[data].length === 0) {
-      delete novosAgendamentos[data];
+  async function cancelar(id: number) {
+    try {
+      await cancelarAgendamento(id);
+      await carregar();
+    } catch (e) {
+      console.warn("Erro ao cancelar:", e);
     }
-
-    setAgendamentos(novosAgendamentos);
-    AsyncStorage.setItem("@agendamentos", JSON.stringify(novosAgendamentos));
   }
+
+  const porData = lista.reduce<Record<string, AgendamentoItem[]>>((acc, item) => {
+    if (!acc[item.data]) acc[item.data] = [];
+    acc[item.data].push(item);
+    return acc;
+  }, {});
+  const datasOrdenadas = Object.keys(porData).sort();
 
   function formatarData(dataISO: string) {
     const [ano, mes, dia] = dataISO.split("-");
@@ -86,27 +54,25 @@ export default function Empresa() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.titulo}>Painel da Empresa</Text>
 
-      {Object.keys(agendamentos).length === 0 && (
+      {lista.length === 0 && (
         <Text style={styles.semAgendamento}>Nenhum agendamento ainda.</Text>
       )}
 
-      {Object.entries(agendamentos).map(([data, lista]) => (
+      {datasOrdenadas.map((data) => (
         <View key={data} style={styles.card}>
           <Text style={styles.data}>{formatarData(data)}</Text>
-
-          {lista.map((item) => (
-            <View key={item.hora} style={styles.linhaHorario}>
+          {(porData[data] || []).map((item) => (
+            <View key={item.id} style={styles.linhaHorario}>
               <View>
                 <Text style={styles.horario}>Horário: {item.hora}</Text>
                 <Text style={styles.servico}>Serviço: {item.servico}</Text>
+                {item.cliente_nome && (
+                  <Text style={styles.cliente}>Cliente: {item.cliente_nome}</Text>
+                )}
               </View>
-
-              <Text
-                style={styles.botaoCancelar}
-                onPress={() => cancelarHorario(data, item.hora)}
-              >
-                Cancelar
-              </Text>
+              <TouchableOpacity onPress={() => cancelar(item.id)}>
+                <Text style={styles.botaoCancelar}>Cancelar</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>
@@ -163,7 +129,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
-  servico: {
-    color: "#444",
-  },
+  servico: { color: "#444" },
+  cliente: { color: "#555", marginTop: 2, fontSize: 13 },
 });
